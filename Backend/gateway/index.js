@@ -29,7 +29,7 @@ app.use("/api/v1/billing",authMiddleware,handleProxyWithUserId(process.env.BILLI
 app.get("/me",authMiddleware,getMe)
 
 app.get("/",(req,res)=>{
-    res.json({message:`Gateway now is running on port ${process.env.PORT} with frontedn url ${process.env.FRONTEND_URL}`})
+    res.json({message:`Gateway now is running and healthy on port ${process.env.PORT} with frontedn url ${process.env.FRONTEND_URL}`})
 })
 
 
