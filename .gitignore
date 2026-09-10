@@ -1,0 +1,55 @@
+# ==========================================
+# Node.js & Dependencies
+# ==========================================
+node_modules/
+jspm_packages/
+web_modules/
+
+# ==========================================
+# Environment Variables & Secrets (CRITICAL)
+# ==========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# ==========================================
+# Production Builds & Artifacts
+# ==========================================
+# React / Vite / Next production build outputs
+build/
+dist/
+.next/
+out/
+
+# ==========================================
+# Logs & Debugging
+# ==========================================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# ==========================================
+# Testing & Coverage
+# ==========================================
+coverage/
+.nyc_output/
+
+# ==========================================
+# IDEs, Editors & System Files
+# ==========================================
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS generated files
+.DS_Store
+Thumbs.db

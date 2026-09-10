@@ -1,0 +1,242 @@
+name: OpenGPT Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
+jobs:
+
+  # =========================
+  # BACKEND DEPLOYMENT
+  # =========================
+  backend-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # =========================
+      # AWS CONFIGURATION
+      # =========================
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # =========================
+      # ECR LOGIN
+      # =========================
+      - name: ECR Login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # =========================
+      # GATEWAY
+      # =========================
+      - name: Build Gateway
+        run: |
+          docker build \
+            -f Backend/gateway/Dockerfile \
+            -t gateway \
+            Backend
+
+      - name: Tag Gateway
+        run: |
+          docker tag gateway:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/gateway:latest
+
+      - name: Push Gateway
+        run: |
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/gateway:latest
+
+      # =========================
+      # AUTH
+      # =========================
+      - name: Build Auth
+        run: |
+          docker build \
+            -f Backend/services/auth/Dockerfile \
+            -t auth \
+            Backend
+
+      - name: Tag Auth
+        run: |
+          docker tag auth:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/auth:latest
+
+      - name: Push Auth
+        run: |
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/auth:latest
+
+      # =========================
+      # CHAT
+      # =========================
+      - name: Build Chat
+        run: |
+          docker build \
+            -f Backend/services/chat/Dockerfile \
+            -t chat \
+            Backend
+
+      - name: Tag Chat
+        run: |
+          docker tag chat:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/chat:latest
+
+      - name: Push Chat
+        run: |
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/chat:latest
+
+      # =========================
+      # AGENT
+      # =========================
+      - name: Build Agent
+        run: |
+          docker build \
+            -f Backend/services/agent/Dockerfile \
+            -t agent \
+            Backend
+
+      - name: Tag Agent
+        run: |
+          docker tag agent:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agent:latest
+
+      - name: Push Agent
+        run: |
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agent:latest
+
+      # =========================
+      # BILLING
+      # =========================
+      - name: Build Billing
+        run: |
+          docker build \
+            -f Backend/services/billing/Dockerfile \
+            -t billing \
+            Backend
+
+      - name: Tag Billing
+        run: |
+          docker tag billing:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/billing:latest
+
+      - name: Push Billing
+        run: |
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/billing:latest
+
+      # =========================
+      # DEPLOY GATEWAY
+      # =========================
+      - name: Deploy Gateway
+        run: |
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.GATEWAY_SERVICE }} \
+            --force-new-deployment
+
+      # =========================
+      # DEPLOY AUTH
+      # =========================
+      - name: Deploy Auth
+        run: |
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.AUTH_SERVICE }} \
+            --force-new-deployment
+
+      # =========================
+      # DEPLOY CHAT
+      # =========================
+      - name: Deploy Chat
+        run: |
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.CHAT_SERVICE }} \
+            --force-new-deployment
+
+      # =========================
+      # DEPLOY AGENT
+      # =========================
+      - name: Deploy Agent
+        run: |
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.AGENT_SERVICE }} \
+            --force-new-deployment
+
+      # =========================
+      # DEPLOY BILLING
+      # =========================
+      - name: Deploy Billing
+        run: |
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.BILLING_SERVICE }} \
+            --force-new-deployment
+
+
+  # =========================
+  # FRONTEND DEPLOYMENT
+  # =========================
+  frontend-deploy:
+    needs: backend-deploy
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # =========================
+      # CREATE FRONTEND ENV FILE
+      # =========================
+      - name: Create Frontend Environment
+        run: |
+          cd Frontend
+
+          cat > .env <<EOF
+          VITE_FIREBASE_API_URL=${{ secrets.VITE_FIREBASE_API_URL }}
+          VITE_GATEWAY_URL=${{ secrets.VITE_GATEWAY_URL }}
+          EOF
+
+      # =========================
+      # BUILD FRONTEND
+      # =========================
+      - name: Build Frontend
+        run: |
+          cd Frontend
+          npm install
+          npm run build
+
+      # =========================
+      # AWS CONFIGURATION
+      # =========================
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # =========================
+      # UPLOAD TO S3
+      # =========================
+      - name: Upload Frontend to S3
+        run: |
+          aws s3 sync \
+            Frontend/dist \
+            s3://${{ secrets.FRONTEND_BUCKET }} \
+            --delete
+
+      # =========================
+      # CLOUDFRONT INVALIDATION
+      # =========================
+      - name: CloudFront Invalidate
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
